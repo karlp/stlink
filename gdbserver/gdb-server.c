@@ -9,6 +9,7 @@
 #include <getopt.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/types.h>
@@ -47,10 +48,11 @@ typedef struct _st_state_t {
     char devicename[100];
     int logging_level;
 	int listen_port;
+    bool stay_alive;
 } st_state_t;
 
 
-int serve(stlink_t *sl, int port);
+int serve(stlink_t *sl, st_state_t *st);
 char* make_memory_map(stlink_t *sl);
 
 
@@ -152,6 +154,7 @@ int main(int argc, char** argv) {
 	state.stlink_version = 2;
 	state.logging_level = DEFAULT_LOGGING_LEVEL;
 	state.listen_port = DEFAULT_GDB_LISTEN_PORT;
+    state.stay_alive = true;
 	parse_options(argc, argv, &state);
 	switch (state.stlink_version) {
 	case 2:
@@ -177,7 +180,11 @@ int main(int argc, char** argv) {
 	}
 #endif
 
-	while(serve(sl, state.listen_port) == 0);
+	while(state.stay_alive == true) {
+        int rc = serve(sl, &state);
+        printf("Serve loop failed with code: %d\n", rc);
+    }
+    printf("GDB requested a proper exit! detaching from the target!\n");
 
 #ifdef __MINGW32__
 winsock_error:
@@ -560,7 +567,58 @@ error:
 	return error;
 }
 
-int serve(stlink_t *sl, int port) {
+/**
+ * Handle all commands of the form "monitor ....."
+ * @param sl context object
+ * @param packet incoming packet data
+ * @param reply our reply to the remote gdb
+ */
+static void handle_monitor_commands(stlink_t *sl, char *packet, char *reply) {
+    // Rcmd uses the wrong separator
+    char *separator = strstr(packet, ","), *params = "";
+    if (separator == NULL) {
+        separator = packet + strlen(packet);
+    } else {
+        params = separator + 1;
+    }
+
+
+    // params contains hex digits for the ascii command.
+    if (!strncmp(params, "7265", 4)) {// resume (checks hex('r'),hex('e))
+#ifdef DEBUG
+        printf("Rcmd: resume\n");
+#endif
+        stlink_run(sl);
+
+        reply = strdup("OK");
+    } else if (!strncmp(params, "6861", 4)) { //half
+        reply = strdup("OK");
+
+        stlink_force_debug(sl);
+
+#ifdef DEBUG
+        printf("Rcmd: halt\n");
+#endif
+    } else if (!strncmp(params, "7265", 4)) { //reset
+        reply = strdup("OK");
+
+        stlink_force_debug(sl);
+        stlink_reset(sl);
+        init_code_breakpoints(sl);
+        init_data_watchpoints(sl);
+
+#ifdef DEBUG
+        printf("Rcmd: reset\n");
+#endif
+    } else {
+#ifdef DEBUG
+        printf("Rcmd: %s\n", params);
+#endif
+    }
+}
+
+int serve(stlink_t *sl, st_state_t *st) {
+    int port = st->listen_port;
 	int sock = socket(AF_INET, SOCK_STREAM, 0);
 	if(sock < 0) {
 		perror("socket");
@@ -688,48 +746,7 @@ int serve(stlink_t *sl, int port) {
 					}
 				}
 			} else if(!strncmp(queryName, "Rcmd,",4)) {
-				// Rcmd uses the wrong separator
-				char *separator = strstr(packet, ","), *params = "";
-				if(separator == NULL) {
-					separator = packet + strlen(packet);
-				} else {
-					params = separator + 1;
-				}
-				
-
-				if (!strncmp(params,"7265",4)) {// resume
-#ifdef DEBUG
-					printf("Rcmd: resume\n");
-#endif
-					stlink_run(sl);
-
-					reply = strdup("OK");
-				} else if (!strncmp(params,"6861",4)) { //half
-					reply = strdup("OK");
-					
-					stlink_force_debug(sl);
-
-#ifdef DEBUG
-					printf("Rcmd: halt\n");
-#endif
-				} else if (!strncmp(params,"7265",4)) { //reset
-					reply = strdup("OK");
-					
-					stlink_force_debug(sl);
-					stlink_reset(sl);
-					init_code_breakpoints(sl);
-					init_data_watchpoints(sl);
-					
-#ifdef DEBUG
-					printf("Rcmd: reset\n");
-#endif
-				} else {
-#ifdef DEBUG
-					printf("Rcmd: %s\n", params);
-#endif
-
-				}
-				
+                handle_monitor_commands(sl, packet, reply);
 			}
 
 			if(reply == NULL)
