@@ -827,9 +827,10 @@ int serve(stlink_t *sl, st_state_t *st) {
 					reply = strdup("OK");
 				}
 			} else if(!strcmp(cmdName, "Kill")) {
+                // GDB is sending a kill to reset...
 				attached = 0;
-
 				reply = strdup("OK");
+                //st->stay_alive = false;
 			}
 
 			if(reply == NULL)
@@ -1089,6 +1090,7 @@ int serve(stlink_t *sl, st_state_t *st) {
 
 			int result = gdb_send_packet(client, reply);
 			if(result != 0) {
+                // One reason we might not be able to send, is if gdb exited...
 				fprintf(stderr, "cannot send: %d\n", result);
 				return 1;
 			}
