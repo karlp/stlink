@@ -103,19 +103,9 @@ int main(int ac, char** av)
     usage();
     goto on_error;
   }
-
-  if (o.devname != NULL) /* stlinkv1 */
-  {
-    sl = stlink_v1_open(50);
-    if (sl == NULL) goto on_error;
-    sl->verbose = 50;
-  }
-  else /* stlinkv2 */
-  {
-    sl = stlink_open_usb(50);
-    if (sl == NULL) goto on_error;
-    sl->verbose = 50;
-  }
+  
+  sl = stlink_open_usb(50, o.devname);
+  sl->verbose = 50;
 
   if (stlink_current_mode(sl) == STLINK_DEV_DFU_MODE)
     stlink_exit_dfu_mode(sl);

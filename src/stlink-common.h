@@ -22,8 +22,8 @@ extern "C" {
 
     // st-link vendor cmd's
 #define USB_ST_VID			0x0483
-#define USB_STLINK_PID			0x3744
-#define USB_STLINK_32L_PID		0x3748
+#define USB_STLINK1_PID		0x3744
+#define USB_STLINK2_PID		0x3748
 
     // STLINK_DEBUG_RESETSYS, etc:
 #define STLINK_OK			0x80

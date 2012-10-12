@@ -155,7 +155,7 @@ int main(int argc, char** argv) {
 	parse_options(argc, argv, &state);
 	switch (state.stlink_version) {
 	case 2:
-		sl = stlink_open_usb(state.logging_level);
+		sl = stlink_open_usb(state.logging_level, state.devicename);
 		if(sl == NULL) return 1;
 		break;
 	case 1:

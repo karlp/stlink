@@ -900,7 +900,7 @@ static stlink_t* stlink_open(const int verbose) {
     
     libusb_set_debug(slsg->libusb_ctx, 3);
     
-    slsg->usb_handle = libusb_open_device_with_vid_pid(slsg->libusb_ctx, USB_ST_VID, USB_STLINK_PID);
+    slsg->usb_handle = libusb_open_device_with_vid_pid(slsg->libusb_ctx, USB_ST_VID, USB_STLINK1_PID);
     if (slsg->usb_handle == NULL) {
         WLOG("Failed to find an stlink v1 by VID:PID\n");
         libusb_close(slsg->usb_handle);
@@ -989,7 +989,7 @@ stlink_t* stlink_v1_open_inner(const int verbose) {
     }
 
     stlink_version(sl);
-    if ((sl->version.st_vid != USB_ST_VID) || (sl->version.stlink_pid != USB_STLINK_PID)) {
+    if ((sl->version.st_vid != USB_ST_VID) || (sl->version.stlink_pid != USB_STLINK1_PID)) {
         ugly_log(UERROR, LOG_TAG, 
             "WTF? successfully opened, but unable to read version details. BROKEN!\n");
         return NULL;
@@ -1012,7 +1012,7 @@ stlink_t* stlink_v1_open_inner(const int verbose) {
     
     // re-query device info (and retest)
     stlink_version(sl);
-    if ((sl->version.st_vid != USB_ST_VID) || (sl->version.stlink_pid != USB_STLINK_PID)) {
+    if ((sl->version.st_vid != USB_ST_VID) || (sl->version.stlink_pid != USB_STLINK1_PID)) {
         ugly_log(UERROR, LOG_TAG, 
             "WTF? successfully opened, but unable to read version details. BROKEN!\n");
         return NULL;

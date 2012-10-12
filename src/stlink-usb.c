@@ -703,8 +703,52 @@ stlink_backend_t _stlink_usb_backend = {
     _stlink_usb_force_debug
 };
 
+libusb_device_handle* find_suitable_device(struct stlink_libusb* slu, const char *devname) {
+    libusb_device **devs;
+    ssize_t cnt;
+    cnt = libusb_get_device_list(slu->libusb_ctx, &devs);
+    ILOG("Found %d usb devices total\n", cnt);  // if cnt < 0, need to free mem and stuff
+    
+    for (int i = 0; i < cnt; i++) {
+        struct libusb_device_descriptor desc;
+        int r = libusb_get_device_descriptor(devs[i], &desc);
+        if (r < 0) {
+            WLOG("Ooops, failed to read about dev: %d\n", i);
+            continue;
+        }
+        if (desc.idVendor != USB_ST_VID) {
+            continue;
+        }
+        r = libusb_open(devs[i], &slu->usb_handle);
+        if (r != 0) {
+            WLOG("oops, failed to open dev %d!\n", i);
+            continue;
+        }
+        
+        unsigned char snum[255];
+        libusb_get_string_descriptor_ascii(slu->usb_handle, desc.iSerialNumber, snum, sizeof(snum));
+        if (desc.idProduct == USB_STLINK1_PID) {
+            ILOG("Found a stlink1 at: %d, serialnumber: %s\n", i, snum);
+        } 
+        if (desc.idProduct == USB_STLINK2_PID) {
+            ILOG("Found a stlink2 at: %d, serialnumber: %s\n", i, snum);
+        }
+        // if serial doesn't match, just return null.
+        if (strcmp(devname, (char *)snum) == 0) {
+            ILOG("Serial numbers match... saving it!\n");
+            break;
+        } else {
+            libusb_close(slu->usb_handle);
+            slu->usb_handle = NULL;
+        }
+        // if it does match, make sure the ref counts all work out...
+    }
 
-stlink_t* stlink_open_usb(const int verbose) {
+    libusb_free_device_list(devs, 1); //free the list, unref the devices in it
+    return NULL;
+}
+
+stlink_t* stlink_open_usb(const int verbose, const char *devname) {
     stlink_t* sl = NULL;
     struct stlink_libusb* slu = NULL;
     int error = -1;
@@ -729,15 +773,21 @@ stlink_t* stlink_open_usb(const int verbose) {
         goto on_error;
     }
     
-    slu->usb_handle = libusb_open_device_with_vid_pid(slu->libusb_ctx, USB_ST_VID, USB_STLINK_32L_PID);
-    if (slu->usb_handle == NULL) {
-	slu->usb_handle = libusb_open_device_with_vid_pid(slu->libusb_ctx, USB_ST_VID, USB_STLINK_PID);
+    if (strlen(devname)) {
+        find_suitable_device(slu, devname);
+    } else { 
+        ILOG("Trying to open the first ST-Link/V2...\n");
+        slu->usb_handle = libusb_open_device_with_vid_pid(slu->libusb_ctx, USB_ST_VID, USB_STLINK2_PID);
+        if (slu->usb_handle == NULL) {
+            ILOG("Trying to open the first ST-Link/V1...\n");
+            slu->usb_handle = libusb_open_device_with_vid_pid(slu->libusb_ctx, USB_ST_VID, USB_STLINK1_PID);
+        }
+    }
 	if (slu->usb_handle == NULL) {
-	    WLOG("Couldn't find any ST-Link/V2 devices\n");
+	    WLOG("Couldn't find any suitable/matching ST-Link devices\n");
 	    goto on_error;
 	}
 	slu->protocoll = 1;
-    }
 
     if (libusb_kernel_driver_active(slu->usb_handle, 0) == 1) {
         int r;
